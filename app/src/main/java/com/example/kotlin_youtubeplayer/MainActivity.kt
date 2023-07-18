@@ -3,6 +3,7 @@ package com.example.kotlin_youtubeplayer
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
+import android.webkit.WebViewClient
 import androidx.lifecycle.MutableLiveData
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.kotlin_youtubeplayer.adapter.VideoCaptionAdapter
@@ -15,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType.Companion.get
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -37,6 +39,12 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         initCaptionList()
+
+        setWebView()
+
+        binding.clPlay.setOnClickListener {
+            stopVideo()
+        }
 
         CoroutineScope(Dispatchers.IO).launch {
             getVideoAPI()
@@ -86,5 +94,112 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
+    }
+
+    private fun setWebView() {
+        binding.webView.apply {
+            settings.javaScriptEnabled = true
+            //自動適應螢幕大小
+            settings.loadWithOverviewMode = true
+            settings.useWideViewPort = true
+            //將圖片調整到適合WebView的大小
+            settings.useWideViewPort = true
+            webViewClient = WebViewClient()
+        }
+
+        val htmlData = getHTMLData("9nhhQhAxhjo")
+        binding.webView.loadDataWithBaseURL("https://www.youtube.com", htmlData, "text/html", "UTF-8", null)
+    }
+
+    private fun getHTMLData(videoId: String): String {
+        return """
+            <!DOCTYPE html>
+            <html>
+                <style type="text/css">
+                body {
+                    top: 0%;
+                    left: 0%;
+                    bottom: 0%;
+                    margin: 0;
+                    height: 100%;
+                    width: 100%;
+                    background-color: #000000;
+                    overflow: hidden;
+                    position: absolute;
+                }
+                </style>
+              <body>
+                <!-- 1. The <iframe> (and video player) will replace this <div> tag. -->
+                <div id="player"></div>
+
+                <script>
+                  // 2. This code loads the IFrame Player API code asynchronously.
+                  var tag = document.createElement('script');
+
+                  tag.src = "https://www.youtube.com/iframe_api";
+                  var firstScriptTag = document.getElementsByTagName('script')[0];
+                  firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+                  // 3. This function creates an <iframe> (and YouTube player)
+                  //    after the API code downloads.
+                  var player;
+                  function onYouTubeIframeAPIReady() {
+                    player = new YT.Player('player', {
+                      height: '100%',
+                      width: '100%',
+                      videoId: '$videoId',
+                      playerVars: {
+                        'playsinline': 1
+                      },
+                      events: {
+                        'onReady': onPlayerReady,
+                        'onStateChange': onPlayerStateChange
+                      }
+                    });
+                  }
+
+                  // 4. The API will call this function when the video player is ready.
+                  function onPlayerReady(event) {
+                    player.playVideo();
+                  }
+
+                  // 5. The API calls this function when the player's state changes.
+                  //    The function indicates that when playing a video (state=1),
+                  //    the player should play for six seconds and then stop.
+                  var done = false;
+                  function onPlayerStateChange(event) {
+                    if (event.data == YT.PlayerState.PLAYING && !done) {
+                      setTimeout(stopVideo, 6000);
+                      done = true;
+                    }
+                  }
+                  function currentTime() {
+                    android.getCurrentTime(player.getCurrentTime());
+                  }
+                  function seekTo(time) {
+                    player.seekTo(time, true);
+                  }
+                  function playVideo() {
+                    player.playVideo();
+                  }
+                  function stopVideo() {
+                    player.stopVideo();
+                  }
+                </script>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
+    private fun playVideo() {
+        binding.webView.evaluateJavascript("playVideo()") {
+
+        }
+    }
+
+    private fun stopVideo() {
+        binding.webView.evaluateJavascript("stopVideo()") {
+
+        }
     }
 }
