@@ -3,6 +3,9 @@ package com.example.kotlin_youtubeplayer
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
+import androidx.lifecycle.MutableLiveData
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.kotlin_youtubeplayer.adapter.VideoCaptionAdapter
 import com.example.kotlin_youtubeplayer.data.VideoDetailReq
 import com.example.kotlin_youtubeplayer.data.VideoDetailRes
 import com.example.kotlin_youtubeplayer.databinding.ActivityMainBinding
@@ -23,13 +26,30 @@ import java.util.concurrent.TimeUnit
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val tag = "MainActivity"
+    private val captionList = ArrayList<VideoDetailRes.Captions>()
+
+    private var videoUrl = ""
+    private lateinit var captionAdapter: VideoCaptionAdapter
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        initCaptionList()
+
         CoroutineScope(Dispatchers.IO).launch {
             getVideoAPI()
+        }
+    }
+
+    private fun initCaptionList() {
+        if (!::captionAdapter.isInitialized)
+            captionAdapter = VideoCaptionAdapter(captionList)
+
+        binding.rvList.apply {
+            layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
+            adapter = captionAdapter
         }
     }
 
@@ -54,7 +74,12 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val jsonString = response.body.string()
                     val res = Gson().fromJson(jsonString, VideoDetailRes::class.java)
-                    Log.d(tag, "${res.result.videoID}")
+
+                    captionList.clear()
+                    captionList.addAll(res.result.videoInfo.captionResult.results[0].captions)
+                    CoroutineScope(Dispatchers.Main).launch {
+                        captionAdapter.notifyItemRangeInserted(0, captionList.size)
+                    }
 
                 } catch (e: Exception) {
                     Log.e(tag, "$e")
