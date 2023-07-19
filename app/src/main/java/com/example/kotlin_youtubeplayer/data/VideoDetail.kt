@@ -20,7 +20,7 @@ data class VideoDetailRes(val status: Int, val errMsgs: ArrayList<String>, val r
 
     data class Results(val language: String, val captions: ArrayList<Captions>)
 
-    data class Captions(val time: Long, val content: String, val contentSimple: String,
+    data class Captions(val time: Long, val miniSecond: Double, val content: String, val contentSimple: String,
                         val practiceCount: String, val correctCount: Int, val highestRate: Int,
                         val pronouncePractice: Int, val pronounceAccomplish: Int, val spellPractice:Int,
                         val spellAccomplish: Int, val recordCount: Int, val contentUserEdit: String,

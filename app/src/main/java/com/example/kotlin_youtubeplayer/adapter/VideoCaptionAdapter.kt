@@ -10,6 +10,8 @@ class VideoCaptionAdapter(val captionList: ArrayList<VideoDetailRes.Captions>): 
 
     inner class ViewHolder (val binding: ItemCaptionBinding): RecyclerView.ViewHolder(binding.root)
 
+    lateinit var onItemClick: ((Int, Double) -> Unit)
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VideoCaptionAdapter.ViewHolder =
         ViewHolder(ItemCaptionBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
@@ -17,8 +19,16 @@ class VideoCaptionAdapter(val captionList: ArrayList<VideoDetailRes.Captions>): 
         holder.apply {
             val item = captionList[position]
 
-            binding.tvCaption.text = item.content
-            binding.tvNumber.text = position.toString()
+            binding.apply {
+                tvCaption.text = item.content
+                tvNumber.text = position.toString()
+
+                root.setBackgroundColor(root.context.resources.getColor(android.R.color.white, null))
+
+                root.setOnClickListener {
+                    onItemClick(position, item.miniSecond)
+                }
+            }
         }
     }
 

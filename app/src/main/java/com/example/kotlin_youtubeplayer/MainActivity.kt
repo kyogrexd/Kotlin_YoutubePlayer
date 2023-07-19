@@ -2,7 +2,10 @@ package com.example.kotlin_youtubeplayer
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.webkit.JavascriptInterface
 import android.webkit.WebViewClient
 import androidx.lifecycle.MutableLiveData
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -43,7 +46,7 @@ class MainActivity : AppCompatActivity() {
         setWebView()
 
         binding.clPlay.setOnClickListener {
-            stopVideo()
+            pauseVideo()
         }
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -59,8 +62,21 @@ class MainActivity : AppCompatActivity() {
             layoutManager = LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false)
             adapter = captionAdapter
         }
-    }
 
+        captionAdapter.apply {
+            onItemClick = { position, second ->
+                //滾動
+                (binding.rvList.layoutManager as LinearLayoutManager)
+                    .scrollToPositionWithOffset(position, 0)
+
+                //影片播放位置
+                seekTo(second)
+
+                //換色
+                setCaptionBackground(position)
+            }
+        }
+    }
 
     private fun getVideoAPI() {
         val req = VideoDetailReq("44f6cfed-b251-4952-b6ab-34de1a599ae4", "5edfb3b04486bc1b20c2851a", 1)
@@ -105,6 +121,7 @@ class MainActivity : AppCompatActivity() {
             //將圖片調整到適合WebView的大小
             settings.useWideViewPort = true
             webViewClient = WebViewClient()
+            addJavascriptInterface(JsInterface(), "android")
         }
 
         val htmlData = getHTMLData("9nhhQhAxhjo")
@@ -148,8 +165,18 @@ class MainActivity : AppCompatActivity() {
                       height: '100%',
                       width: '100%',
                       videoId: '$videoId',
+                      //https://developers.google.com/youtube/player_parameters?hl=zh-tw
                       playerVars: {
-                        'playsinline': 1
+                        'modestbranding': 1,// 隱藏YouTube Logo
+                        'enablejsapi': 1,
+                        'showinfo': 0,// 隱藏影片標題
+                        'fs': 0, //避免播放器的全螢幕按鈕顯示
+                        'rel': 0, //播放器就不會顯示相關影片
+                        'controls': 1, //顯示播放器的控制項
+                        'playsinline': 1,
+                        'frameborder': 0,
+                        'mute': 0, //靜音
+                        'autoplay': 1 //自動播放
                       },
                       events: {
                         'onReady': onPlayerReady,
@@ -160,28 +187,66 @@ class MainActivity : AppCompatActivity() {
 
                   // 4. The API will call this function when the video player is ready.
                   function onPlayerReady(event) {
-                    player.playVideo();
+                    event.target.playVideo();
                   }
 
                   // 5. The API calls this function when the player's state changes.
                   //    The function indicates that when playing a video (state=1),
                   //    the player should play for six seconds and then stop.
-                  var done = false;
+                  var refreshInterval;
                   function onPlayerStateChange(event) {
-                    if (event.data == YT.PlayerState.PLAYING && !done) {
-                      setTimeout(stopVideo, 6000);
-                      done = true;
+                    clearInterval(refreshInterval)
+
+                    switch (player.getPlayerState()) {
+                        case YT.PlayerState.UNSTARTED:
+                            sendStateChange("-1");
+                            return;
+                        case YT.PlayerState.ENDED:
+                            sendStateChange("0");
+                            return;
+
+                        case YT.PlayerState.PLAYING:
+                            sendStateChange("1");
+
+                            startSendCurrentTimeInterval();
+                            return;
+
+                        case YT.PlayerState.PAUSED:
+                            sendStateChange("2");
+                            return;
+
+                        case YT.PlayerState.BUFFERING:
+                            sendStateChange("3");
+                            return;
+
+                        case YT.PlayerState.CUED:
+                            sendStateChange("4");
+                            return;
                     }
                   }
-                  function currentTime() {
-                    android.getCurrentTime(player.getCurrentTime());
+                  
+                  function startSendCurrentTimeInterval() {
+                    refreshInterval = setInterval(function() {
+                        android.getCurrentTime(player.getCurrentTime());
+                    }, 500)
                   }
+                  
+                  function sendStateChange(newState) {
+                    android.getStateChange(newState)
+                  }
+                  
                   function seekTo(time) {
                     player.seekTo(time, true);
                   }
+                  
                   function playVideo() {
                     player.playVideo();
                   }
+                  
+                  function pauseVideo() {
+                    player.pauseVideo();
+                  }
+                  
                   function stopVideo() {
                     player.stopVideo();
                   }
@@ -191,8 +256,63 @@ class MainActivity : AppCompatActivity() {
         """.trimIndent()
     }
 
+    inner class JsInterface {
+        @JavascriptInterface
+        fun getStateChange(data: String) {
+            CoroutineScope(Dispatchers.Main).launch {
+                val status = when (data) {
+                    "-1" -> "UNSTARTED"
+                    "0" -> "ENDED"
+                    "1" -> "PLAYING"
+                    "2" -> "PAUSED"
+                    "3" -> "BUFFERING"
+                    "4" -> "VIDEO_CUED"
+                    else -> "UNKNOWN"
+                }
+                Log.d(tag, "$status")
+            }
+        }
+
+        @JavascriptInterface
+        fun getCurrentTime(time: Int) {
+            CoroutineScope(Dispatchers.Main).launch {
+                captionList.forEachIndexed { position, captions ->
+                    if (captions.miniSecond.toInt() == time) {
+                        setCaptionBackground(position)
+                        (binding.rvList.layoutManager as LinearLayoutManager)
+                            .scrollToPositionWithOffset(position, 0)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setCaptionBackground(pos: Int) {
+        for (index in 0..binding.rvList.childCount) {
+            val v = binding.rvList.getChildAt(index)
+            v?.setBackgroundColor(resources.getColor(android.R.color.white, null))
+        }
+
+        //指定位置的背景改成灰色
+        val childIndex = pos - (binding.rvList.layoutManager as LinearLayoutManager).findFirstVisibleItemPosition()
+        val view = binding.rvList.getChildAt(childIndex)
+        view?.setBackgroundColor(resources.getColor(android.R.color.darker_gray, null))
+    }
+
+    private fun seekTo(time: Double) {
+        binding.webView.evaluateJavascript("seekTo($time)") {
+
+        }
+    }
+
     private fun playVideo() {
         binding.webView.evaluateJavascript("playVideo()") {
+
+        }
+    }
+
+    private fun pauseVideo() {
+        binding.webView.evaluateJavascript("") {
 
         }
     }
